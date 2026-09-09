@@ -6,16 +6,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var statusItem: NSStatusItem!
     private var popover: NSPopover!
     private let store = UsageStore()
-    private var cancellable: AnyCancellable?
+    private var cancellables: Set<AnyCancellable> = []
+    private var lastSnapshot = UsageSnapshot()
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         if let button = statusItem.button {
-            if let image = NSImage(systemSymbolName: "bolt.fill", accessibilityDescription: "Claude Usage") {
+            if let image = NSImage(systemSymbolName: "sparkles", accessibilityDescription: "Claude Usage") {
                 image.isTemplate = true
                 button.image = image
             }
-            button.title = " …" // guaranteed-visible placeholder until the first scan finishes
+            button.title = store.showPercentInMenuBar ? " …" : "" // placeholder until the first scan finishes
             button.imagePosition = .imageLeading
             button.action = #selector(togglePopover(_:))
             button.target = self
@@ -23,19 +24,32 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         popover = NSPopover()
         popover.behavior = .transient
-        popover.contentSize = NSSize(width: 300, height: 460)
+        popover.contentSize = NSSize(width: 300, height: 480)
         popover.contentViewController = NSHostingController(rootView: PopoverView(store: store))
 
         store.start()
 
-        cancellable = store.$snapshot.sink { [weak self] snapshot in
-            self?.updateStatusBarTitle(snapshot: snapshot)
-        }
+        store.$snapshot
+            .sink { [weak self] snapshot in
+                self?.lastSnapshot = snapshot
+                self?.updateStatusBarTitle()
+            }
+            .store(in: &cancellables)
+
+        store.$showPercentInMenuBar
+            .sink { [weak self] _ in
+                self?.updateStatusBarTitle()
+            }
+            .store(in: &cancellables)
     }
 
-    private func updateStatusBarTitle(snapshot: UsageSnapshot) {
+    private func updateStatusBarTitle() {
         guard let button = statusItem.button else { return }
-        let percent = Int(snapshot.contextPercent * 100)
+        guard store.showPercentInMenuBar else {
+            button.title = ""
+            return
+        }
+        let percent = Int(lastSnapshot.contextPercent * 100)
         button.title = " \(percent)%"
     }
 

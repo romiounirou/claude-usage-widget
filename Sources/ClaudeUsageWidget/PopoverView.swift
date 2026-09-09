@@ -7,7 +7,7 @@ struct PopoverView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
             HStack {
-                Image(systemName: "bolt.fill")
+                Image(systemName: "sparkles")
                     .foregroundColor(.secondary)
                 Text("Claude")
                     .font(.system(size: 14, weight: .semibold))
@@ -46,6 +46,12 @@ struct PopoverView: View {
                     .foregroundColor(.secondary)
                 DetailsView(snapshot: store.snapshot)
             }
+
+            Divider()
+
+            Toggle("Mostrar % na barra de menu", isOn: $store.showPercentInMenuBar)
+                .toggleStyle(.checkbox)
+                .font(.system(size: 11))
 
             Divider()
 

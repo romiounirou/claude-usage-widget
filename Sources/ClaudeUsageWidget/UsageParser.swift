@@ -10,7 +10,6 @@ final class UsageParser {
     private var dailyOutput: [String: Int] = [:]
     private var dailyCacheRead: [String: Int] = [:]
     private var dailyCacheCreation: [String: Int] = [:]
-    private var dailyTotal: [String: Int] = [:]
     private var dailyCost: [String: Double] = [:]
 
     private var latestTimestamp: Date = .distantPast
@@ -104,7 +103,6 @@ final class UsageParser {
         dailyOutput[dayKey, default: 0] += outputTokens
         dailyCacheRead[dayKey, default: 0] += cacheRead
         dailyCacheCreation[dayKey, default: 0] += cacheCreation
-        dailyTotal[dayKey, default: 0] += inputTokens + outputTokens + cacheRead + cacheCreation
         dailyCost[dayKey, default: 0] += PricingTable.cost(
             model: model, input: inputTokens, output: outputTokens,
             cacheRead: cacheRead, cacheCreation: cacheCreation
@@ -126,7 +124,10 @@ final class UsageParser {
         for offset in stride(from: 13, through: 0, by: -1) {
             guard let day = Calendar.current.date(byAdding: .day, value: -offset, to: today) else { continue }
             let key = dayFormatter.string(from: day)
-            days.append(DayUsage(dayKey: key, label: labelFormatter.string(from: day), totalTokens: dailyTotal[key] ?? 0))
+            // "Fresh" tokens only (input + output + cache-write) — cache-read
+            // is excluded here too, for the same reason as todayFreshTokens.
+            let fresh = (dailyInput[key] ?? 0) + (dailyOutput[key] ?? 0) + (dailyCacheCreation[key] ?? 0)
+            days.append(DayUsage(dayKey: key, label: labelFormatter.string(from: day), totalTokens: fresh))
         }
 
         snap.contextUsedTokens = latestContextTokens
@@ -136,7 +137,6 @@ final class UsageParser {
         snap.todayOutputTokens = dailyOutput[todayKey] ?? 0
         snap.todayCacheReadTokens = dailyCacheRead[todayKey] ?? 0
         snap.todayCacheCreationTokens = dailyCacheCreation[todayKey] ?? 0
-        snap.todayTotalTokens = dailyTotal[todayKey] ?? 0
         snap.estimatedCostToday = dailyCost[todayKey] ?? 0
         snap.last14Days = days
         snap.lastUpdated = Date()
