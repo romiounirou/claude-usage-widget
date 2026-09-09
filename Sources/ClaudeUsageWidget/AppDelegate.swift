@@ -2,13 +2,14 @@ import AppKit
 import SwiftUI
 import Combine
 
-final class AppDelegate: NSObject, NSApplicationDelegate {
+final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
     private var statusItem: NSStatusItem!
     private var popover: NSPopover!
     private let store = UsageStore()
     private var cancellables: Set<AnyCancellable> = []
     private var lastSnapshot = UsageSnapshot()
     private var showPercent = true
+    private var anchorWindow: NSWindow?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
@@ -23,6 +24,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         popover.behavior = .transient
         popover.contentSize = NSSize(width: 300, height: 480)
         popover.contentViewController = NSHostingController(rootView: PopoverView(store: store))
+        popover.delegate = self
 
         store.start()
 
@@ -63,18 +65,54 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     @objc private func togglePopover(_ sender: AnyObject?) {
-        guard let button = statusItem.button else { return }
         if popover.isShown {
             popover.performClose(sender)
-        } else {
-            store.refreshNow()
-            // Accessory (menu-bar-only) apps aren't always the "active app" when
-            // clicked, and NSPopover can anchor itself incorrectly (falling back
-            // to screen center) if the app isn't active yet when show() is called.
-            NSApp.activate(ignoringOtherApps: true)
-            popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
-            popover.contentViewController?.view.window?.makeKey()
+            return
         }
+
+        store.refreshNow()
+        NSApp.activate(ignoringOtherApps: true)
+
+        // On recent macOS, third-party menu bar items are hosted out-of-process
+        // by Control Center; the status item button's own `.window` is just a
+        // local stub with a meaningless (often zero-height) frame. Asking
+        // NSPopover to anchor `relativeTo: button.bounds, of: button` in that
+        // world resolves to a bogus screen position, and it falls back to
+        // centering itself on the main screen instead.
+        //
+        // NSEvent.mouseLocation is unaffected by that — it's the real screen
+        // position of the click that triggered this action — so anchor a tiny
+        // invisible window there instead and show the popover relative to it.
+        let mouseLocation = NSEvent.mouseLocation
+        let screen = NSScreen.screens.first { NSMouseInRect(mouseLocation, $0.frame, false) } ?? NSScreen.main
+
+        let thickness = NSStatusBar.system.thickness
+        let screenTop = screen?.frame.maxY ?? (mouseLocation.y + thickness)
+        let anchorWidth: CGFloat = 40
+        let anchorRect = NSRect(
+            x: mouseLocation.x - anchorWidth / 2,
+            y: screenTop - thickness,
+            width: anchorWidth,
+            height: thickness
+        )
+
+        let window = NSWindow(contentRect: anchorRect, styleMask: .borderless, backing: .buffered, defer: false)
+        window.isOpaque = false
+        window.backgroundColor = .clear
+        window.level = .statusBar
+        window.ignoresMouseEvents = true
+        let anchorView = NSView(frame: NSRect(origin: .zero, size: anchorRect.size))
+        window.contentView = anchorView
+        window.orderFrontRegardless()
+        anchorWindow = window
+
+        popover.show(relativeTo: anchorView.bounds, of: anchorView, preferredEdge: .minY)
+        popover.contentViewController?.view.window?.makeKey()
+    }
+
+    func popoverDidClose(_ notification: Notification) {
+        anchorWindow?.orderOut(nil)
+        anchorWindow = nil
     }
 }
 
