@@ -131,7 +131,13 @@ final class UsageParser {
         }
 
         snap.contextUsedTokens = latestContextTokens
-        snap.contextLimitTokens = PricingTable.contextLimit(model: latestModel)
+        // The 1M-context beta is a request header, not something recorded in
+        // the logged model id, so a name-based lookup can never see it. If
+        // the observed usage already blew past the normal 200k ceiling, the
+        // session must be running with the larger window — infer it from
+        // that instead of trusting the (unreliable) model name.
+        let modelLimit = PricingTable.contextLimit(model: latestModel)
+        snap.contextLimitTokens = latestContextTokens > modelLimit ? 1_000_000 : modelLimit
         snap.contextModel = latestModel
         snap.todayInputTokens = dailyInput[todayKey] ?? 0
         snap.todayOutputTokens = dailyOutput[todayKey] ?? 0

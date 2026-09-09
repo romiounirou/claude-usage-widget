@@ -12,7 +12,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         if let button = statusItem.button {
-            button.image = StatusBadge.render(topText: "CLAUDE", bottomText: "…", color: .systemGray)
+            button.image = StatusBadge.render(topText: "CLAUDE", bottomText: "…")
             button.imagePosition = .imageOnly
             button.action = #selector(togglePopover(_:))
             button.target = self
@@ -51,13 +51,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         let percent = Int(lastSnapshot.contextPercent * 100)
-        let color: NSColor
-        switch lastSnapshot.contextPercent {
-        case ..<0.5: color = .systemGreen
-        case ..<0.8: color = .systemOrange
-        default: color = .systemRed
-        }
-        button.image = StatusBadge.render(topText: "CLAUDE", bottomText: "\(percent)%", color: color)
+        button.image = StatusBadge.render(topText: "CLAUDE", bottomText: "\(percent)%")
         button.imagePosition = .imageOnly
     }
 
@@ -78,22 +72,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 }
 
 /// Renders a compact two-line status-bar badge (label on top, value below),
-/// styled after classic menu bar monitor widgets (Stats, iStat Menus, …).
+/// as a template image so it stays monochrome and blends into the menu bar
+/// like every other native status item — no colored background pill.
 private enum StatusBadge {
-    static func render(topText: String, bottomText: String, color: NSColor) -> NSImage {
-        let size = NSSize(width: 42, height: 20)
+    static func render(topText: String, bottomText: String) -> NSImage {
+        let size = NSSize(width: 40, height: 18)
         let image = NSImage(size: size, flipped: false) { rect in
-            let path = NSBezierPath(roundedRect: rect, xRadius: 4, yRadius: 4)
-            color.setFill()
-            path.fill()
-
             let topAttrs: [NSAttributedString.Key: Any] = [
-                .font: NSFont.systemFont(ofSize: 7, weight: .semibold),
-                .foregroundColor: NSColor.white,
+                .font: NSFont.systemFont(ofSize: 7, weight: .medium),
+                .foregroundColor: NSColor.black,
             ]
             let bottomAttrs: [NSAttributedString.Key: Any] = [
-                .font: NSFont.systemFont(ofSize: 10.5, weight: .bold),
-                .foregroundColor: NSColor.white,
+                .font: NSFont.systemFont(ofSize: 10, weight: .semibold),
+                .foregroundColor: NSColor.black,
             ]
 
             let top = NSAttributedString(string: topText, attributes: topAttrs)
@@ -101,17 +92,16 @@ private enum StatusBadge {
             let topSize = top.size()
             let bottomSize = bottom.size()
 
-            let gap: CGFloat = 0
-            let totalHeight = topSize.height + bottomSize.height + gap
-            let topY = rect.midY + totalHeight / 2 - topSize.height + 2
-            let bottomY = topY - bottomSize.height - gap
+            let totalHeight = topSize.height + bottomSize.height
+            let topY = rect.midY + totalHeight / 2 - topSize.height + 1
+            let bottomY = topY - bottomSize.height
 
             top.draw(at: NSPoint(x: rect.midX - topSize.width / 2, y: topY))
             bottom.draw(at: NSPoint(x: rect.midX - bottomSize.width / 2, y: bottomY))
 
             return true
         }
-        image.isTemplate = false
+        image.isTemplate = true
         return image
     }
 }
